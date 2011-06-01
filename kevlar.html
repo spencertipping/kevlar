@@ -2706,15 +2706,14 @@ RPC endpoints are just functions that transparently have their arguments JSON-de
 you might write a 'hello world' function:
 
 | var kevlar = require('./kevlar');
-  var server = kevlar.server();
-  server.rpc('/sayhi', function (name) {
+  var server = kevlar.server({sayhi: function (name) {
     this('hello ' + name);
-  });
+  }});
   require('http').createServer(server).listen(8080);
 
 Calling this function using a server-side HTTP client or using the client-side wrapper is straightforward:
 
-| var rpc = kevlar.rpc('/sayhi');
+| var rpc = kevlar.rpc('sayhi');
   rpc('bob', function (reply) {
     console.log('the server said ' + reply);
   });
@@ -2725,6 +2724,10 @@ You can also use regular AJAX from the browser:
   $.post('/sayhi', JSON.stringify(['bob']), function (reply_array) {
     alert('the server said ' + reply_array[0]);
   });
+
+caterwaul.js_all()(function (exports) {
+  exports.server(endpoints) = 
+})(exports);
 __
 meta::template('comment', '\'\';     # A mechanism for line or block comments.');
 meta::template('eval', <<'__');
