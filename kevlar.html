@@ -2756,8 +2756,12 @@ You can also use regular AJAX from the browser:
               handle_page(id)               = valid_page_request(id) -then- valid_page_reply(id),
 
               handle_rpc_data(id, f)        = collect_chunks(id, given.data in parse_and_invoke(id, data, f)),
-              parse_and_invoke(id, d, f)    = f.call(valid_rpc_reply(id), json) -when.json -where [json = JSON.parse(d) -safely- invalid_parse_error(id, d) /re [false]]
-                                              -safely- rpc_error(id, e),
+
+              parse_and_invoke(id, d, f)    = f.call(reply_with_arguments, json)
+                                              -when.json
+                                              -where  [reply_with_arguments() = valid_rpc_reply(id, Array.prototype.slice.call(arguments)),
+                                                       json                   = JSON.parse(d) -safely- invalid_parse_error(id, d) /re [false]]
+                                              -safely [rpc_error(id, e)],
 
               collect_chunks(id, cc)        = requests[id] -effect [it.on('data', given.c [size_ok(c) ? chunks.push(c) : too_big()]), it.on('end', cc(chunks.join('')))]
                                                             -where [chunks      = [],
