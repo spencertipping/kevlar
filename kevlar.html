@@ -2698,7 +2698,9 @@ index things; this is up to you. Here's how you build an index (in this example 
     });
   > by_letter.remove('b', 'bar');                               // removes 'bar' from the collection of things starting with b
 
-The on-disk format for indexes is a bit complex. (More on this soon.)
+The on-disk format for indexes is a bit complex. There's a great paper by the Tokutek guys that describes what they call 'fractal trees', an indexing strategy that is much higher-performance
+than B-trees on disks where seeks are expensive. I may try to implement those for this database, though it will probably be the simplified version presented in their paper rather than the full
+version they've released in their TokuDB product.
 __
 meta::sdoc('js::kevlar.server', <<'__');
 Kevlar web framework | Spencer Tipping
