@@ -2722,7 +2722,15 @@ For the moment I'm deferring indexing support. The priority at the moment is to 
                                                               write_each_queue_item_for(b)   = write_stream_for(b).end(queues[bucket].join('\n'), 'utf8'),
                                                               write_stream_for(bucket)       = fs.createWriteStream('#{db}/#{table}/#{bucket}', {flags: 'a', mode: 0600}),
 
-                                                              read_bucket_contents(bucket)   = 
+                                                              read_bucket_contents(b, f)     = each_line(fs.createReadStream('#{db}/#{table}/#{bucket}', {encoding: 'utf8'}), f),
+
+                                                              each_line(stream, f)           = stream -effect [it.on('data', given.piece in got_pieces(piece.split(/\n/))),
+                                                                                                               it.on('end',  given.nothing in f(partial) /when.partial)]
+
+                                                                                                       -where [partial        = '',
+                                                                                                               got_pieces(ps) = f(partial + ps[0])
+                                                                                                                                -then- ps.slice(1, ps.length - 1).forEach(f)
+                                                                                                                                -then [partial = ps[ps.length - 1]]],
 
                                                               queues                         = {},
                                                               queue_for(bucket)              = write_queues -re [it[bucket] || (it[bucket] = [])]],
