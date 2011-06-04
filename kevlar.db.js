@@ -56,33 +56,59 @@
 // For the moment I'm deferring indexing support. The priority at the moment is to get basic data storage going.
 
   caterwaul.js_all()(function (exports, require) {
-    exports.database(name) = fs.mkdirSync(name, 0755) -safely- null -returning- {log: log_generator_for(name)}, //, associative: associative_generator_for(name)},
+    exports.database(name) = fs.mkdirSync(name, 0755) -safely- null -returning- {log: log_generator_for(name), associative: associative_generator_for(name)},
 
-    where [fs                                  = require('fs'),
+    where [fs                                   = require('fs'),
 
-           log_generator_for(db)(table)        = fs.mkdirSync('#{db}/#{table}', 0755) -safely- null
-                                                 -returning- result -effect [it.find(bucket, each) = result -effect- read_bucket_contents(bucket, each)]
+           associative_generator_for(db)(table) = fs.mkdirSync('#{db}/#{table}', 0755) -safely- null
+                                                  -returning- result -effect [it.find(name, f) = result -effect- read_contents(name, f)]
 
-                                                     -where [result(bucket, stuff)          = result -effect [append_to_bucket(bucket, JSON.stringify(stuff))],
+                                                      -where [result(name, value)            = result -effect [set_contents(name, value)],
 
-                                                             append_to_bucket(bucket, line) = queue_for(bucket).push(line) -then- schedule_commit_for(bucket),
+                                                              djb2_hash(s)                   = bind [h = 5381] in s *![h = (x.charAt(0) * 33 + h) >>> 0] /seq -re- h,
+                                                              prefix_directory_for(name)     = (djb2_hash(name) & 0xfff).toString(36),
+                                                              with_prefix(name, cc)          = fs.stat('#{db}/#{table}/#{dir}', given [err, stat] [
+                                                                                                 err ? fs.mkdir('#{db}/#{table}/#{dir}', 0755, given.nothing in cc(dir)) : cc(dir)])
+                                                                                               -where [dir = prefix_directory_for(name)],
 
-                                                             timeouts                       = {},
-                                                             schedule_commit_for(bucket)    = timeouts[bucket] || (timeouts[bucket] = setTimeout(given.nothing in commit(bucket), 1000)),
+                                                              pending_changes                = {},
+                                                              timeouts                       = {},
+                                                              schedule_commit_for(name)      = timeouts[name] || (timeouts[name] = setTimeout(given.nothing in commit(name), 1000)),
+                                                              commit(name)                   = write_file_contents(name, pending_changes[name]),
 
-                                                             commit(bucket)                 = write_each_queue_item_for(bucket) -then [delete queues[bucket], delete timeouts[bucket]],
-                                                             write_each_queue_item_for(b)   = write_stream_for(b).end(queues[b].join('\n') + '\n', 'utf8'),
-                                                             write_stream_for(bucket)       = fs.createWriteStream('#{db}/#{table}/#{bucket}', {flags: 'a', mode: 0644}),
+                                                              set_contents(name, value)      = pending_changes[name] = value -effect [schedule_commit_for(name)],
+                                                              write_file_contents(name, v)   = with_prefix(name, given.prefix in
+                                                                                                 fs.writeFile('#{db}/#{table}/#{prefix}/#{name}', JSON.stringify(v), 'utf8',
+                                                                                                              given.err [err /wobbly /when.err, delete pending_changes[name]])),
 
-                                                             read_bucket_contents(b, f)     = each_line(fs.createReadStream('#{db}/#{table}/#{b}', {encoding: 'utf8'}), f),
+                                                              read_contents(name, f)         = name in pending_changes ? pending_changes[name] :
+                                                                                               with_prefix(name, given.prefix in
+                                                                                                 fs.readFile('#{db}/#{table}/#{prefix}/#{name}', 'utf8',
+                                                                                                             given [err, data] [err /wobbly /when.err, f(JSON.parse(data))]))],
 
-                                                             each_line(stream, f)           = stream -effect [it.on('data', given.piece   in got_pieces(piece.split(/\n/))),
-                                                                                                              it.on('end',  given.nothing in f(partial) -when- partial.length)]
+           log_generator_for(db)(table)         = fs.mkdirSync('#{db}/#{table}', 0755) -safely- null
+                                                  -returning- result -effect [it.find(bucket, each) = result -effect- read_bucket_contents(bucket, each)]
 
-                                                                                                      -where [partial        = '',
-                                                                                                              got_pieces(ps) = f(partial + ps[0])
-                                                                                                                               -then- ps.slice(1, ps.length - 1).forEach(f)
-                                                                                                                               -then [partial = ps.length > 1 && ps[ps.length - 1]]],
-                                                             queues                         = {},
-                                                             queue_for(bucket)              = queues[bucket] || (queues[bucket] = [])]]})(exports, require);
+                                                      -where [result(bucket, stuff)          = result -effect [append_to_bucket(bucket, JSON.stringify(stuff))],
+
+                                                              append_to_bucket(bucket, line) = queue_for(bucket).push(line) -then- schedule_commit_for(bucket),
+
+                                                              timeouts                       = {},
+                                                              schedule_commit_for(bucket)    = timeouts[bucket] || (timeouts[bucket] = setTimeout(given.nothing in commit(bucket), 1000)),
+
+                                                              commit(bucket)                 = write_each_queue_item_for(bucket) -then [delete queues[bucket], delete timeouts[bucket]],
+                                                              write_each_queue_item_for(b)   = write_stream_for(b).end(queues[b].join('\n') + '\n', 'utf8'),
+                                                              write_stream_for(bucket)       = fs.createWriteStream('#{db}/#{table}/#{bucket}', {flags: 'a', mode: 0644}),
+
+                                                              read_bucket_contents(b, f)     = each_line(fs.createReadStream('#{db}/#{table}/#{b}', {encoding: 'utf8'}), f),
+
+                                                              each_line(stream, f)           = stream -effect [it.on('data', given.piece   in got_pieces(piece.split(/\n/))),
+                                                                                                               it.on('end',  given.nothing in f(partial) -when- partial.length)]
+
+                                                                                                       -where [partial        = '',
+                                                                                                               got_pieces(ps) = f(partial + ps[0])
+                                                                                                                                -then- ps.slice(1, ps.length - 1).forEach(f)
+                                                                                                                                -then [partial = ps.length > 1 && ps[ps.length - 1]]],
+                                                              queues                         = {},
+                                                              queue_for(bucket)              = queues[bucket] || (queues[bucket] = [])]]})(exports, require);
 // Generated by SDoc 
