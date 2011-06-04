@@ -2713,11 +2713,16 @@ For the moment I'm deferring indexing support. The priority at the moment is to 
                                                  -returning- this /effect [append_to_bucket(bucket, JSON.stringify(stuff))] /given [bucket, stuff]
                                                      -effect [it.find(bucket, each) = read_bucket_contents(bucket, each)]
 
-                                                      -where [append_to_bucket(bucket, line) = queue_for(bucket).push(line) -then- commit(bucket),
+                                                      -where [append_to_bucket(bucket, line) = queue_for(bucket).push(line) -then- schedule_commit_for(bucket),
 
-                                                              commit(bucket)                 = write_each_queue_item_for(bucket) -then- delete queues[bucket],
+                                                              timeouts                       = {},
+                                                              schedule_commit_for(bucket)    = timeouts[bucket] || (timeouts[bucket] = setTimeout(given.nothing in commit(bucket), 1000)),
+
+                                                              commit(bucket)                 = write_each_queue_item_for(bucket) -then- delete queues[bucket] -then- delete timeouts[bucket],
                                                               write_each_queue_item_for(b)   = write_stream_for(b).end(queues[bucket].join('\n'), 'utf8'),
                                                               write_stream_for(bucket)       = fs.createWriteStream('#{db}/#{table}/#{bucket}', {flags: 'a', mode: 0600}),
+
+                                                              read_bucket_contents(bucket)   = 
 
                                                               queues                         = {},
                                                               queue_for(bucket)              = write_queues -re [it[bucket] || (it[bucket] = [])]],
