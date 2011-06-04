@@ -95,7 +95,8 @@ You can also use regular AJAX from the browser:
             default_options               = {},
             settings                      = caterwaul.merge(default_options, options) -effect [it.log_database || (it.log_database = exports.database('kevlar.server.log'))],
 
-            valid_rpcs                    = endpoints /pairs *[['/#{x[0]}', x[1]]] |object |seq,
+            default_rpcs                  = {'/kevlar/rpc-map': given.nothing in this(endpoints /keys /seq)},
+            valid_rpcs                    = caterwaul.merge(default_rpcs, endpoints /pairs *[['/#{x[0]}', x[1]]] |object |seq),
 
             intent_is_rpc(r)              = r.method === 'POST',
             rpc_endpoint_for(url)         = url.charAt(0) === '/' && valid_rpcs[url],

@@ -1,0 +1,23 @@
+Kevlar jQuery RPC client | Spencer Tipping
+Licensed under the terms of the MIT source code license
+
+Introduction.
+There are two modes of client operation. By default, kevlar uses a blocking AJAX connection to retrieve the RPC list; this automatically configures the client-side RPC endpoints to give you
+named methods. However, sometimes you don't have the luxury of blocking the UI thread this way. In that case you can create a non-auto RPC endpoint.
+
+All methods are attached to a global named kevlar. Like caterwaul, the kevlar global gives you a deglobalize() method to restore the original global.
+
+Note that this module expects a global JSON object to be available. This can be enabled by loading json2.js from json.org, or by using a modern browser that provides native JSON serialization
+and parsing.
+
+caterwaul.js_all()(function (original_kevlar) {
+  kevlar(xs = arguments) = kevlar -effect- xs *![create_rpc_endpoint_for(x)] /seq,
+  kevlar.deglobalize()   = kevlar -re [kevlar = original_kevlar],
+
+  kevlar.auto(cc)        = bind [result = kevlar] in $.ajax({async: !cc, url: '/kevlar/rpc-map', type: 'POST', data: '[]'}).complete(cc || given.rpcs [result = rpcs[0]]) -re- result,
+
+  where [create_rpc_endpoint_for(name)       = kevlar[to_javascript_identifier(name)] = rpc_thunk_for(name),
+         rpc_thunk_for(name)(xs = arguments) = $.ajax({type: 'POST', url: '/#{name}', data: JSON.stringify(xs), success: callback})
+                                               -where [callback = xs[xs.length - 1] -re [it && it.constructor === Function ? xs.pop() : undefined]],
+
+         to_javascript_identifier(s)         = s.replace(/[^A-Za-z0-9_$]/g, '_').replace(/_+/g, '_')]})(typeof kevlar === 'undefined' ? undefined : kevlar);
