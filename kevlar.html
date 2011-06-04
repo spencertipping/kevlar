@@ -3037,7 +3037,7 @@ meta::todo('bugs', <<'__');
 Critical database bugs.
 These will cause data loss or something similarly catastrohpic.
 
-| [   ] db.critical mkdir failures are not handled correctly
+| [|||] db.critical mkdir failures are not handled correctly [resolved: now they result in toplevel errors]
 __
 meta::todo('features', <<'__');
 Database todo items.
@@ -3051,13 +3051,13 @@ The database underpins the server project (since the server uses it for logging)
 
 Server todo items.
 
-| [|| ] server Routing logic
-  [|| ] server RPC implementation
+| [|||] server Routing logic
+  [|||] server RPC implementation
   [|| ] server Client page precompiler
   [|| ] server Client page server
-  [|  ] server Request/reply logging and integration with kevlar DB
+  [|||] server Request/reply logging and integration with kevlar DB
   [   ] server Integration and unit tests
-  [|  ] server REPL environment
+  [|||] server REPL environment
 
 Client todo items.
 
