@@ -223,6 +223,15 @@ meta::define_form 'template', sub {
   meta::externalize "template::$name", "template::$name", meta::eval_in("sub {\n$value\n}", "template::$name");
 };
 __
+meta::meta('type::todo', <<'__');
+# Todo lists are special cases of SDoc syntax.
+meta::configure 'todo', inherit => 0, extension => '.sdoc';
+meta::define_form 'todo', sub {
+  my ($name, $value) = @_;
+  meta::externalize $name, "todo::$name", sub {
+    return edit("todo::$name") if ! @_ || $_[0] eq 'edit';
+    &{'todo-summary'}("todo::$name") if $_[0] eq 'show'}};
+__
 meta::alias('e', 'edit sdoc::js::kevlar.server');
 meta::alias('edb', 'edit sdoc::js::kevlar.db');
 meta::bootstrap('html', <<'__');
@@ -308,6 +317,7 @@ meta::cache('parent-identification', <<'__');
 /home/spencertipping/conjectures/perl-objects/sdoc a1e8480e579614c01dabeecf0f963bcc
 notes a9e5975593ed5d90d943ad98405c71e5
 preprocessor 70dae4b46eb4e06798ec6f38d17d4c7b
+todo 62bc8a83ef5d4941cd2c1cdfb57a0320
 __
 meta::cached_dependency('caterwaul.js', <<'__');
 // Core caterwaul build with version ID | Spencer Tipping
@@ -1661,6 +1671,16 @@ create("note::$_[0]");
 __
 meta::function('notes', 'ls(\'-a\', \'^note::\');');
 meta::function('parents', 'join "\\n", grep s/^parent:://o, sort keys %data;');
+meta::function('parse-todo', <<'__');
+# Takes a string of todo text and parses it. Multiple todo lists can be
+# combined, resulting in a longer list.
+my @todo_paragraphs = grep s/^\h*\|//, split /\n{2,}/, join "\n\n", retrieve(@_);
+my @todo_lines      = grep /^\h*\[[ \|]+\]\h*\w/, map split(/\n/), @todo_paragraphs;
+
+sub progress_of {my ($s) = @_; ($s =~ /^(\|*)/ and length $1) / length $s}
+
+map /^\s*\[([ \|]+)\]\h*(\H+)\h*(.*)$/ && {progress_meter => $1, progress => progress_of($1), category => $2, details => $3}, @todo_lines;
+__
 meta::function('perl', <<'__');
 my $result = eval(join ' ', @_);
 $@ ? terminal::error($@) : $result;
@@ -1748,6 +1768,14 @@ meta::function('reload', 'around_hook(\'reload\', sub {execute($_) for grep ! /^
 meta::function('render', <<'__');
 hook('before-render');
 hook('after-render');
+__
+meta::function('repl', <<'__');
+# Starts a node repl with kevlar already loaded.
+node([qw/cached_dependency::caterwaul.js cached_dependency::caterwaul.std.js js::kevlar.db js::kevlar.server js::repl-driver/]);
+__
+meta::function('repl.db', <<'__');
+# Starts a node repl with kevlar already loaded.
+node([qw/cached_dependency::caterwaul.js cached_dependency::caterwaul.std.js js::kevlar.db js::repl-driver/]);
 __
 meta::function('rm', <<'__');
 around_hook('rm', @_, sub {
@@ -1927,6 +1955,20 @@ my $hash = fast_hash(fast_hash(scalar @keys) . join '|', @keys);
 $hash = fast_hash("$data{$_}|$hash") for @keys;
 $hash;
 __
+meta::function('todo-summary', <<'__');
+my @todo_items = &{'parse-todo'}(@_);
+my %categories;
+my %category_completion;
+
+push @{$categories{$_->{category}} ||= []}, $_         for @todo_items;
+$category_completion{$_->{category}} += $_->{progress} for @todo_items;
+
+# Adjust to represent averages rather than totals
+$category_completion{$_} /= @{$categories{$_}} for keys %categories;
+
+join "\n\n", map sprintf("%s: %4.2f%%\n%s", $_, $category_completion{$_} * 100,
+                         join "\n", map sprintf("%-8s %-16s %s", "[$_->{progress_meter}]", $_->{category}, $_->{details}), @{$categories{$_}}), sort keys %categories;
+__
 meta::function('touch', 'associate($_, \'\') for @_;');
 meta::function('unlock', 'hook(\'unlock\', chmod_self(sub {$_[0] | 0200}));');
 meta::function('update', '&{\'update-from\'}(@_, grep s/^parent:://o, sort keys %data);');
@@ -2004,6 +2046,11 @@ unlink $other if my $result = $observed eq (my $state = state());
 terminal::error("Verification failed; expected $state but got $observed from $other") unless $result;
 hook('after-verify', $result, observed => $observed, expected => $state);
 $result;
+__
+meta::hook('after-render::base-files', <<'__');
+file::write("$_.js.sdoc",  retrieve("sdoc::js::$_"))  for grep s/^sdoc::js:://, sort keys %data;
+file::write("$_.js",       retrieve("js::$_"))        for grep s/^sdoc::js:://, sort keys %data;
+file::write("$_.js.sdocp", retrieve("sdocp::js::$_")) for grep s/^sdoc::js:://, sort keys %data;
 __
 meta::internal_function('around_hook', <<'__');
 # around_hook('hookname', @args, sub {
@@ -2305,6 +2352,11 @@ terminal::warning("$@ when running with_exported()") if $@;
 unlink $name;
 $result;
 __
+meta::js('repl-driver', <<'__');
+// At this point Kevlar is stored in exports. We need to move it to a variable called 'kevlar' and expose that to the REPL context.
+var repl = require('repl').start();
+repl.context.kevlar = exports;
+__
 meta::library('shell', <<'__');
 # Functions for shell parsing and execution.
 package shell;
@@ -2367,6 +2419,16 @@ meta::message_color('cc', '36');
 meta::message_color('state', 'purple');
 meta::message_color('states', 'yellow');
 meta::message_color('test', 'purple');
+meta::parent('./sdoc', <<'__');
+function::sdoc                           4d33dcf625897e463bb30fc91cb94339
+function::sdoc-html                      7e7de47fe059a336309a4a0c06856401
+function::sdocp                          c3d738d982ba87418a298ff58478a85b
+meta::type::sdoc                         22cd7315641d38c9d536344e83c36bed
+parent::/home/spencertipping/bin/object  df16d2086f726b0747ec8ed746c99d97
+retriever::html-sdoc                     c98c4a902a9473df7c875bca9b90af31
+retriever::sdoc                          662061e9e41491e2a1debd6862ccf1e7
+retriever::sdocp                         330694ea14a23bb04b65c761075cd946
+__
 meta::parent('/home/spencertipping/bin/configuration', <<'__');
 meta::type::configuration                d67e10a128e6b1d958c5b9d3bbe25aa4
 parent::/home/spencertipping/bin/object  9088a9cf9c95b7c1184f1c3b528824ba
@@ -2629,6 +2691,18 @@ template::failing_conditional  5c593329b434a7044f68cec4b77e8ed9
 template::include              e0624844a65ae41e0217dd871fc0dbfb
 template::pinclude             5ba61c3034a4b183881936aec30d2be9
 __
+meta::parent('todo', <<'__');
+function::parse-todo      1fce39b3caaeea235602a111c6032147
+function::todo-summary    1fe95bdf8a01882d7eefbddc7f317eba
+meta::type::todo          143fa39e155c81f4186aa53a947296ec
+parent::./sdoc            9a29dd8f67504bfba5bd8659a92d0cff
+parent::vim-highlighters  445a7c9e0e64042d7002d6dac55d7d53
+__
+meta::parent('vim-highlighters', <<'__');
+function::vim                cf9e37026f6cd1499a6dd258fbbcd060
+meta::type::vim_highlighter  11a2d74eca3445ee1b7887a6f6370462
+parent::object               df16d2086f726b0747ec8ed746c99d97
+__
 meta::retriever('file', '-f $_[0] ? file::read($_[0]) : undef;');
 meta::retriever('html-sdoc', <<'__');
 my ($attribute) = @_;
@@ -2704,39 +2778,36 @@ version they've released in their TokuDB product.
 
 For the moment I'm deferring indexing support. The priority at the moment is to get basic data storage going.
 
-  caterwaul.js_all()(function (exports) {
-    exports.database(name) = {log: log_generator_for(name), associative: associative_generator_for(name)},
+  caterwaul.js_all()(function (exports, require) {
+    exports.database(name) = fs.mkdirSync(name, 0755) -safely- null -returning- {log: log_generator_for(name)}, //, associative: associative_generator_for(name)},
 
     where [fs                                  = require('fs'),
 
-           log_generator_for(db)(table)        = fs.mkdirSync('#{db}/#{table}')
-                                                 -returning- this /effect [append_to_bucket(bucket, JSON.stringify(stuff))] /given [bucket, stuff]
-                                                     -effect [it.find(bucket, each) = read_bucket_contents(bucket, each)]
+           log_generator_for(db)(table)        = fs.mkdirSync('#{db}/#{table}', 0755) -safely- null
+                                                 -returning- result -effect [it.find(bucket, each) = result -effect- read_bucket_contents(bucket, each)]
 
-                                                      -where [append_to_bucket(bucket, line) = queue_for(bucket).push(line) -then- schedule_commit_for(bucket),
+                                                     -where [result(bucket, stuff)          = result -effect [append_to_bucket(bucket, JSON.stringify(stuff))],
 
-                                                              timeouts                       = {},
-                                                              schedule_commit_for(bucket)    = timeouts[bucket] || (timeouts[bucket] = setTimeout(given.nothing in commit(bucket), 1000)),
+                                                             append_to_bucket(bucket, line) = queue_for(bucket).push(line) -then- schedule_commit_for(bucket),
 
-                                                              commit(bucket)                 = write_each_queue_item_for(bucket) -then- delete queues[bucket] -then- delete timeouts[bucket],
-                                                              write_each_queue_item_for(b)   = write_stream_for(b).end(queues[bucket].join('\n'), 'utf8'),
-                                                              write_stream_for(bucket)       = fs.createWriteStream('#{db}/#{table}/#{bucket}', {flags: 'a', mode: 0600}),
+                                                             timeouts                       = {},
+                                                             schedule_commit_for(bucket)    = timeouts[bucket] || (timeouts[bucket] = setTimeout(given.nothing in commit(bucket), 1000)),
 
-                                                              read_bucket_contents(b, f)     = each_line(fs.createReadStream('#{db}/#{table}/#{bucket}', {encoding: 'utf8'}), f),
+                                                             commit(bucket)                 = write_each_queue_item_for(bucket) -then [delete queues[bucket], delete timeouts[bucket]],
+                                                             write_each_queue_item_for(b)   = write_stream_for(b).end(queues[b].join('\n') + '\n', 'utf8'),
+                                                             write_stream_for(bucket)       = fs.createWriteStream('#{db}/#{table}/#{bucket}', {flags: 'a', mode: 0644}),
 
-                                                              each_line(stream, f)           = stream -effect [it.on('data', given.piece in got_pieces(piece.split(/\n/))),
-                                                                                                               it.on('end',  given.nothing in f(partial) /when.partial)]
+                                                             read_bucket_contents(b, f)     = each_line(fs.createReadStream('#{db}/#{table}/#{b}', {encoding: 'utf8'}), f),
 
-                                                                                                       -where [partial        = '',
-                                                                                                               got_pieces(ps) = f(partial + ps[0])
-                                                                                                                                -then- ps.slice(1, ps.length - 1).forEach(f)
-                                                                                                                                -then [partial = ps[ps.length - 1]]],
+                                                             each_line(stream, f)           = stream -effect [it.on('data', given.piece   in got_pieces(piece.split(/\n/))),
+                                                                                                              it.on('end',  given.nothing in f(partial) -when- partial.length)]
 
-                                                              queues                         = {},
-                                                              queue_for(bucket)              = write_queues -re [it[bucket] || (it[bucket] = [])]],
-
-          associative_generator_for(db)(table) = 
-  })(exports);
+                                                                                                      -where [partial        = '',
+                                                                                                              got_pieces(ps) = f(partial + ps[0])
+                                                                                                                               -then- ps.slice(1, ps.length - 1).forEach(f)
+                                                                                                                               -then [partial = ps.length > 1 && ps[ps.length - 1]]],
+                                                             queues                         = {},
+                                                             queue_for(bucket)              = queues[bucket] || (queues[bucket] = [])]]})(exports, require);
 __
 meta::sdoc('js::kevlar.server', <<'__');
 Kevlar web framework | Spencer Tipping
@@ -2924,6 +2995,34 @@ my ($commands) = @_;
 return '' if template::failing_conditional($commands);
 my $text = join "\n\n", map retrieve($_), split /\s+/, $commands;
 "\n\n$text\n\n";
+__
+meta::todo('bugs', <<'__');
+Bug list.
+As I find bugs I'll create tasks for them.
+__
+meta::todo('features', <<'__');
+Database todo items.
+The database underpins the server project (since the server uses it for logging), so it's fairly high priority.
+
+| [|| ] db Log table support
+  [   ] db Associative table support
+  [   ] db Indexing support
+  [   ] db Integration and unit tests
+  [|||] db REPL environment
+
+Server todo items.
+
+| [|| ] server Routing logic
+  [|| ] server RPC implementation
+  [|| ] server Client page precompiler
+  [|| ] server Client page server
+  [|  ] server Request/reply logging and integration with kevlar DB
+  [   ] server Integration and unit tests
+  [|  ] server REPL environment
+
+Client todo items.
+
+| [   ] client Create client todo list
 __
 internal::main();
 
