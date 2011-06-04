@@ -232,8 +232,8 @@ meta::define_form 'todo', sub {
     return edit("todo::$name") if ! @_ || $_[0] eq 'edit';
     &{'todo-summary'}("todo::$name") if $_[0] eq 'show'}};
 __
-meta::alias('e', 'edit sdoc::js::kevlar.server');
 meta::alias('edb', 'edit sdoc::js::kevlar.db');
+meta::alias('es', 'edit sdoc::js::kevlar.server');
 meta::alias('fs', 'features show');
 meta::bootstrap('html', <<'__');
 <html>
@@ -2780,11 +2780,13 @@ version they've released in their TokuDB product.
 For the moment I'm deferring indexing support. The priority at the moment is to get basic data storage going.
 
   caterwaul.js_all()(function (exports, require) {
-    exports.database(name) = fs.mkdirSync(name, 0755) -safely- null -returning- {log: log_generator_for(name), associative: associative_generator_for(name)},
+    exports.database(name) = ensure_directory_sync(name) -returning-
+                             {log: log_generator_for(name), associative: associative_generator_for(name), hourly_log: hourly_log_generator_for(name)},
 
     where [fs                                   = require('fs'),
+           ensure_directory_sync(name)          = fs.statSync(name) -safely- fs.mkdirSync(name, 0755),
 
-           associative_generator_for(db)(table) = fs.mkdirSync('#{db}/#{table}', 0755) -safely- null
+           associative_generator_for(db)(table) = ensure_directory_sync('#{db}/#{table}')
                                                   -returning- result -effect [it.find(name, f) = result -effect- read_contents(name, f)]
 
                                                       -where [result(name, value)            = result -effect [set_contents(name, value)],
@@ -2810,7 +2812,11 @@ For the moment I'm deferring indexing support. The priority at the moment is to 
                                                                                                  fs.readFile('#{db}/#{table}/#{prefix}/#{name}', 'utf8',
                                                                                                              given [err, data] [err /wobbly /when.err, f(JSON.parse(data))]))],
 
-           log_generator_for(db)(table)         = fs.mkdirSync('#{db}/#{table}', 0755) -safely- null
+           hourly_log_generator_for(db)(table)  = bind [log = log_generator_for(db)(table)] in
+                                                  given [thing] [log(now(), thing)] -effect [it.find(bucket, f) = log.find(bucket, f)]
+                                                                                     -where [now() = '#{d.getFullYear()}.#{n(d.getMonth() + 1)}#{n(d.getDay())}.#{n(d.getHours())}00'
+                                                                                                     -where [d = new Date(), n(x) = x < 10 ? '0#{x}' : x]],
+           log_generator_for(db)(table)         = ensure_directory_sync('#{db}/#{table}')
                                                   -returning- result -effect [it.find(bucket, each) = result -effect- read_bucket_contents(bucket, each)]
 
                                                       -where [result(bucket, stuff)          = result -effect [append_to_bucket(bucket, JSON.stringify(stuff))],
@@ -2916,86 +2922,90 @@ You can also use regular AJAX from the browser:
     alert('the server said ' + reply_array[0]);
   });
 
-  caterwaul.js_all()(function (exports) {
+  caterwaul.js_all()(function (exports, require) {
     // Immutable configuration variables
     const reply_timeout_interval  = 300000,
-          request_body_size_limit = 1000000;
+          request_body_size_limit = 1048576;
 
     // Helper functions
-    const next_server_id    = ++id -given.nothing -where [id = 0],
-          filesystem_logger = {request: logger_for('request'), reply: logger_for('reply'), error: logger_for('error')}
-                              -where [TODO];
+    const next_server_id = given.nothing in Math.random() * 0xffffffff >>> 0;
 
     exports.server(endpoints, options) = handle_request
 
-      -where [requests                      = {},
-              responses                     = {},
-              timeouts                      = {},
-              times                         = {},
+    -where [requests                      = {},
+            responses                     = {},
+            timeouts                      = {},
+            times                         = {},
 
-              default_options               = {log: filesystem_logger},
-              settings                      = caterwaul.merge(default_options, options),
+            default_options               = {},
+            settings                      = caterwaul.merge(default_options, options) -effect [it.log_database || (it.log_database = exports.database('kevlar.server.log'))],
 
-              valid_rpcs                    = endpoints /pairs *[['/#{x[0]}', x[1]]] |object |seq,
+            valid_rpcs                    = endpoints /pairs *[['/#{x[0]}', x[1]]] |object |seq,
 
-              intent_is_rpc(r)              = r.method === 'POST',
-              rpc_endpoint_for(url)         = url.charAt(0) === '/' && valid_rpcs[url],
+            intent_is_rpc(r)              = r.method === 'POST',
+            rpc_endpoint_for(url)         = url.charAt(0) === '/' && valid_rpcs[url],
 
-              handle_request(req, res)      = handle_tracked(track(req, res)),
-              handle_tracked(id)            = intent_is_rpc(requests[id]) ? handle_rpc(id) : handle_page(id),
-              handle_rpc(id)                = endpoint ? handle_rpc_data(id, endpoint) : invalid_method_error(id),
-              handle_page(id)               = valid_page_request(id) -then- valid_page_reply(id),
+            handle_request(req, res)      = handle_tracked(track(req, res)),
+            handle_tracked(id)            = intent_is_rpc(requests[id]) ? handle_rpc(id, rpc_endpoint_for(requests[id].url)) : handle_page(id),
+            handle_rpc(id, endpoint)      = endpoint ? handle_rpc_data(id, endpoint) : invalid_method_error(id),
+            handle_page(id)               = valid_page_request(id) -then- valid_page_reply(id),
 
-              handle_rpc_data(id, f)        = collect_chunks(id, given.data in parse_and_invoke(id, data, f)),
+            handle_rpc_data(id, f)        = collect_chunks(id, given.data in parse_and_invoke(id, data, f)),
 
-              parse_and_invoke(id, d, f)    = f.call(reply_with_arguments, json)
-                                              -when.json
-                                              -where  [reply_with_arguments() = valid_rpc_reply(id, Array.prototype.slice.call(arguments)),
-                                                       json                   = JSON.parse(d) -safely- invalid_parse_error(id, d) /re [false]]
-                                              -safely [rpc_error(id, e)],
+            parse_and_invoke(id, d, f)    = valid_rpc_request(id, json) -then- f.apply(reply_with_arguments, json)
+                                            -when.json
+                                            -where  [reply_with_arguments() = valid_rpc_reply(id, Array.prototype.slice.call(arguments)),
+                                                     json                   = JSON.parse(d) -safely- invalid_parse_error(id, d) /re [false]]
+                                            -safely [rpc_error(id, e)],
 
-              collect_chunks(id, cc)        = requests[id] -effect [it.on('data', given.c [size_ok(c) ? chunks.push(c) : too_big()]), it.on('end', cc(chunks.join('')))]
-                                                            -where [chunks      = [],
-                                                                    size_so_far = 0,
-                                                                    too_big()   = invalid_size_error(id, size_so_far) -effect [chunks = null, too_big() = null],
-                                                                    size_ok(s)  = (size_so_far += s.length) < request_body_size_limit],
+            collect_chunks(id, cc)        = requests[id] -effect [it.on('data', given.c [size_ok(c) ? chunks.push(c) : too_big()]),
+                                                                  it.on('end',  given.nothing in cc(chunks && chunks.join('')))]
 
-              server_id                     = next_server_id(),
-              next_sequence_number          = given.nothing [++n >= 1000000 ? (n = 100000) : n] -where [n = 100000],
-              request_id()                  = '#{d.getYear()}.#{n(d.getMonth() + 1)}#{n(d.getDate())}.#{n(d.getHours())}#{n(d.getMinutes())}.#{server_id}.#{next_sequence_number()}'
-                                              -where [d = new Date(), n(x) = x < 10 ? '0#{x}' : x],
+                                                          -where [chunks      = [],
+                                                                  size_so_far = 0,
+                                                                  too_big()   = invalid_size_error(id, size_so_far) -effect [chunks = null, too_big() = null],
+                                                                  size_ok(s)  = (size_so_far += s.length) < request_body_size_limit],
 
-              track(req, res)               = id -effect [requests[id]  = req,
-                                                          responses[id] = res,
-                                                          times[id]     = +new Date(),
-                                                          timeouts[id]  = setTimeout(timeout_error(id), reply_timeout_interval)] -where [id = request_id()],
+            server_id                     = next_server_id(),
+            next_sequence_number          = given.nothing [++n >= 1000000 ? (n = 100000) : n] -where [n = 100000],
+            request_id()                  = '#{d.getFullYear()}.#{n(d.getMonth() + 1)}#{n(d.getDate())}.#{n(d.getHours())}#{n(d.getMinutes())}.#{server_id}.#{next_sequence_number()}'
+                                            -where [d = new Date(), n(x) = x < 10 ? '0#{x}' : x],
 
-              clear(id)                     = delete requests[id] -then- delete responses[id] -then- delete timeouts[id] -then- delete times[id],
+            track(req, res)               = id -effect [requests[id]  = req,
+                                                        responses[id] = res,
+                                                        times[id]     = +new Date(),
+                                                        timeouts[id]  = setTimeout(timeout_error(id), reply_timeout_interval)] -where [id = request_id()],
 
-              reply_with_error(id, code)    = responses[id] -se [it.writeHead(code, {'content-type': 'text/plain'}), it.end(id)]                                          -then- clear(id),
-              reply_with_json(id, json)     = responses[id] -se [it.writeHead(200, {'content-type': 'application/json'}), it.end(JSON.stringify(json))]                   -then- clear(id),
-              reply_with_page(id)           = responses[id] -se [it.writeHead(200, {'content-type': 'text/html'}), require('fs').createReadStream('index.html').pipe(it)] -then- clear(id),
+            clear(id)                     = delete requests[id] -then- delete responses[id] -then- delete timeouts[id] -then- delete times[id],
 
-              request_log_base(id)          = {id: id, url: r.url, headers: r.headers, date: times[id]}                 -where [r = requests[id]],
-              reply_log_base(id)            = {id: id, url: r.url, date: +new Date(), latency: +new Date() - times[id]} -where [r = requests[id]],
+            reply_with_error(id, code)    = responses[id] -se [it.writeHead(code, {'content-type': 'text/plain'}), it.end(id)]                                          -then- clear(id),
+            reply_with_json(id, json)     = responses[id] -se [it.writeHead(200, {'content-type': 'application/json'}), it.end(JSON.stringify(json))]                   -then- clear(id),
+            reply_with_page(id)           = responses[id] -se [it.writeHead(200, {'content-type': 'text/html'}), require('fs').createReadStream('index.html').pipe(it)] -then- clear(id),
 
-              log_request_error(id, stuff)  = settings.log.request(caterwaul.merge(request_log_base(id), stuff)),
-              log_request(id, stuff)        = settings.log.request(caterwaul.merge(request_log_base(id), stuff)),
-              log_reply_error(id, stuff)    = settings.log.error  (caterwaul.merge(reply_log_base  (id), stuff)),
-              log_reply(id, stuff)          = settings.log.reply  (caterwaul.merge(reply_log_base  (id), stuff)),
+            request_log_base(id)          = {id: id, url: r.url, headers: r.headers, date: times[id]}                 -where [r = requests[id]],
+            reply_log_base(id)            = {id: id, url: r.url, date: +new Date(), latency: +new Date() - times[id]} -where [r = requests[id]],
 
-              valid_rpc_reply(id)(json)     = log_reply(id, {json: json}) -then- reply_with_json(id, json),
-              valid_page_reply(id)          = log_reply(id, {})           -then- reply_with_page(id),
+            request_logger                = settings.log_database.hourly_log('request'),
+            error_logger                  = settings.log_database.hourly_log('error'),
+            reply_logger                  = settings.log_database.hourly_log('reply'),
 
-              timeout_error(id)()           = log_reply_error(id, {})         -then- reply_with_error(id, 503),
-              rpc_error(id, e)              = log_reply_error(id, {error: e}) -then- reply_with_error(id, 500),
+            log_request_error(id, stuff)  = request_logger(caterwaul.merge(request_log_base(id), stuff)),
+            log_request(id, stuff)        = request_logger(caterwaul.merge(request_log_base(id), stuff)),
+            log_reply_error(id, stuff)    = error_logger  (caterwaul.merge(reply_log_base  (id), stuff)),
+            log_reply(id, stuff)          = reply_logger  (caterwaul.merge(reply_log_base  (id), stuff)),
 
-              valid_rpc_request(id, json)   = log_request(id, {json: json}),
-              valid_page_request(id)        = log_request(id, {page: true}),
+            valid_rpc_reply(id, json)     = log_reply(id, {json: json}) -then- reply_with_json(id, json),
+            valid_page_reply(id)          = log_reply(id, {})           -then- reply_with_page(id),
 
-              invalid_method_error(id)      = log_request_error(id, {invalid: 'method', method: requests[id].method}) -then- reply_with_error(id, 405),
-              invalid_size_error(id, size)  = log_request_error(id, {invalid: 'size',   size:   size})                -then- reply_with_error(id, 413),
-              invalid_parse_error(id, data) = log_request_error(id, {invalid: 'json',   data:   data})                -then- reply_with_error(id, 400)]})(exports);
+            timeout_error(id)()           = log_reply_error(id, {})         -then- reply_with_error(id, 503),
+            rpc_error(id, e)              = log_reply_error(id, {error: e}) -then- reply_with_error(id, 500),
+
+            valid_rpc_request(id, json)   = log_request(id, {json: json}),
+            valid_page_request(id)        = log_request(id, {page: true}),
+
+            invalid_method_error(id)      = log_request_error(id, {invalid: 'method', method: requests[id].method}) -then- reply_with_error(id, 405),
+            invalid_size_error(id, size)  = log_request_error(id, {invalid: 'size',   size:   size})                -then- reply_with_error(id, 413),
+            invalid_parse_error(id, data) = log_request_error(id, {invalid: 'json',   data:   data})                -then- reply_with_error(id, 400)]})(exports, require);
 __
 meta::template('comment', '\'\';     # A mechanism for line or block comments.');
 meta::template('eval', <<'__');

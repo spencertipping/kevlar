@@ -56,11 +56,13 @@
 // For the moment I'm deferring indexing support. The priority at the moment is to get basic data storage going.
 
   caterwaul.js_all()(function (exports, require) {
-    exports.database(name) = fs.mkdirSync(name, 0755) -safely- null -returning- {log: log_generator_for(name), associative: associative_generator_for(name)},
+    exports.database(name) = ensure_directory_sync(name) -returning-
+                             {log: log_generator_for(name), associative: associative_generator_for(name), hourly_log: hourly_log_generator_for(name)},
 
     where [fs                                   = require('fs'),
+           ensure_directory_sync(name)          = fs.statSync(name) -safely- fs.mkdirSync(name, 0755),
 
-           associative_generator_for(db)(table) = fs.mkdirSync('#{db}/#{table}', 0755) -safely- null
+           associative_generator_for(db)(table) = ensure_directory_sync('#{db}/#{table}')
                                                   -returning- result -effect [it.find(name, f) = result -effect- read_contents(name, f)]
 
                                                       -where [result(name, value)            = result -effect [set_contents(name, value)],
@@ -86,7 +88,11 @@
                                                                                                  fs.readFile('#{db}/#{table}/#{prefix}/#{name}', 'utf8',
                                                                                                              given [err, data] [err /wobbly /when.err, f(JSON.parse(data))]))],
 
-           log_generator_for(db)(table)         = fs.mkdirSync('#{db}/#{table}', 0755) -safely- null
+           hourly_log_generator_for(db)(table)  = bind [log = log_generator_for(db)(table)] in
+                                                  given [thing] [log(now(), thing)] -effect [it.find(bucket, f) = log.find(bucket, f)]
+                                                                                     -where [now() = '#{d.getFullYear()}.#{n(d.getMonth() + 1)}#{n(d.getDay())}.#{n(d.getHours())}00'
+                                                                                                     -where [d = new Date(), n(x) = x < 10 ? '0#{x}' : x]],
+           log_generator_for(db)(table)         = ensure_directory_sync('#{db}/#{table}')
                                                   -returning- result -effect [it.find(bucket, each) = result -effect- read_bucket_contents(bucket, each)]
 
                                                       -where [result(bucket, stuff)          = result -effect [append_to_bucket(bucket, JSON.stringify(stuff))],
