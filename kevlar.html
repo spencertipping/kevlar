@@ -2782,7 +2782,8 @@ caterwaul.js_all()(function (original_kevlar) {
   kevlar(xs = arguments) = kevlar -effect- xs *![create_rpc_endpoint_for(x)] /seq,
   kevlar.deglobalize()   = kevlar -re [kevlar = original_kevlar],
 
-  kevlar.auto(cc)        = bind [result = kevlar] in $.ajax({async: !cc, url: '/kevlar/rpc-map', type: 'POST', data: '[]'}).complete(cc || given.rpcs [result = rpcs[0]]) -re- result,
+  kevlar.auto(cc)        = bind [result = kevlar] in $.ajax({async: !cc, url: '/kevlar/rpc-map', type: 'POST', data: '[]'}).complete(cc || given.rpcs [result = rpcs[0]]) -re-
+                                                     kevlar.apply(null, result),
 
   where [create_rpc_endpoint_for(name)       = kevlar[to_javascript_identifier(name)] = rpc_thunk_for(name),
          rpc_thunk_for(name)(xs = arguments) = $.ajax({type: 'POST', url: '/#{name}', data: JSON.stringify(xs), success: callback})
