@@ -2701,6 +2701,29 @@ index things; this is up to you. Here's how you build an index (in this example 
 The on-disk format for indexes is a bit complex. There's a great paper by the Tokutek guys that describes what they call 'fractal trees', an indexing strategy that is much higher-performance
 than B-trees on disks where seeks are expensive. I may try to implement those for this database, though it will probably be the simplified version presented in their paper rather than the full
 version they've released in their TokuDB product.
+
+For the moment I'm deferring indexing support. The priority at the moment is to get basic data storage going.
+
+  caterwaul.js_all()(function (exports) {
+    exports.database(name) = {log: log_generator_for(name), associative: associative_generator_for(name)},
+
+    where [fs                                  = require('fs'),
+
+           log_generator_for(db)(table)        = fs.mkdirSync('#{db}/#{table}')
+                                                 -returning- this /effect [append_to_bucket(bucket, JSON.stringify(stuff))] /given [bucket, stuff]
+                                                     -effect [it.find(bucket, each) = read_bucket_contents(bucket, each)]
+
+                                                      -where [append_to_bucket(bucket, line) = queue_for(bucket).push(line) -then- commit(bucket),
+
+                                                              commit(bucket)                 = write_each_queue_item_for(bucket) -then- delete queues[bucket],
+                                                              write_each_queue_item_for(b)   = write_stream_for(b).end(queues[bucket].join('\n'), 'utf8'),
+                                                              write_stream_for(bucket)       = fs.createWriteStream('#{db}/#{table}/#{bucket}', {flags: 'a', mode: 0600}),
+
+                                                              queues                         = {},
+                                                              queue_for(bucket)              = write_queues -re [it[bucket] || (it[bucket] = [])]],
+
+          associative_generator_for(db)(table) = 
+  })(exports);
 __
 meta::sdoc('js::kevlar.server', <<'__');
 Kevlar web framework | Spencer Tipping
