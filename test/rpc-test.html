@@ -324,6 +324,7 @@ run this script with the 'usage' argument.
 
 __
 meta::cache('parent-identification', <<'__');
+../kevlar.html 36c766fa1297d04c8ddc4b937e125738
 ./sdoc 
 /home/spencertipping/bin/configuration aa772900bb5b925cb84346bd72a4249d
 /home/spencertipping/bin/node-base da62d84a9e81832f089520c172982c1a
@@ -1455,7 +1456,6 @@ THE SOFTWARE.
 __
 meta::data('main', 'server.js');
 meta::data('name', 'node-base');
-meta::data('permanent-identity', '36c766fa1297d04c8ddc4b937e125738');
 meta::data('quiet', '1');
 meta::data('watching', '1');
 meta::function('alias', <<'__');
@@ -1809,6 +1809,11 @@ hook('bin/before-run-forever');
 &$f(@args) while sleep 0.1 && ! -f 'stop';
 hook('bin/after-run-forever');
 __
+meta::function('run-rpc-test', <<'__');
+render();
+node([dep(qw/caterwaul.js caterwaul.std.js/), qw/js::kevlar.db js::kevlar.server js::test.rpc/]);
+
+__
 meta::function('save', 'around_hook(\'save\', sub {dangerous(\'\', sub {file::write($0, serialize()); $transient{initial} = state()}) if verify()});');
 meta::function('save-state', <<'__');
 # Creates a named copy of the current state and stores it.
@@ -2071,9 +2076,9 @@ meta::function('vim', <<'__');
 file::write("$ENV{'HOME'}/.vim/syntax/$_.vim", retrieve("vim_highlighter::$_")) for grep s/^vim_highlighter:://o, keys %data;
 __
 meta::hook('after-render::base-files', <<'__');
-file::write("$_.js.sdoc",  retrieve("sdoc::js::$_"))  for grep s/^sdoc::js:://, sort keys %data;
-file::write("$_.js",       retrieve("js::$_"))        for grep s/^sdoc::js:://, sort keys %data;
-file::write("$_.js.sdocp", retrieve("sdocp::js::$_")) for grep s/^sdoc::js:://, sort keys %data;
+file::write('index.html', precompile('sdoc::index.html'));
+file::write('index.html.original', sdoc('sdoc::index.html'));
+
 __
 meta::indicator('cc', 'length ::retrieve(\'data::current-continuation\') ? "\\033[1;36mcc\\033[0;0m" : \'\';');
 meta::indicator('locked', 'is_locked() ? "\\033[1;31mlocked\\033[0;0m" : \'\';');
@@ -2449,6 +2454,18 @@ meta::message_color('cc', '36');
 meta::message_color('state', 'purple');
 meta::message_color('states', 'yellow');
 meta::message_color('test', 'purple');
+meta::parent('../kevlar.html', <<'__');
+function::precompile                        32e19eef128fbfef5cce7acfc0aa1f4c
+function::repl                              50545d151b25f018cf48abe9e00ea989
+function::repl.db                           e71d9a9f1d9ee3b0e5efa838542dff2c
+js::repl-driver                             3f71c757866d6cfe5b78a39e56d1a368
+parent::/home/spencertipping/bin/node-base  7fd547ac452d94724171cae3f78fdca4
+parent::todo                                c97b413ad3695e0da4c53cde974d4b53
+sdoc::js::kevlar.client.jquery              d0e9f6068bc890ed7a020e1e033813d1
+sdoc::js::kevlar.db                         8d5f033fe452b42c2f9a767f4e6f3be9
+sdoc::js::kevlar.server                     1a9b83e94b1cacdd54bc04db665e79f9
+
+__
 meta::parent('./sdoc', <<'__');
 function::sdoc                           4d33dcf625897e463bb30fc91cb94339
 function::sdoc-html                      7e7de47fe059a336309a4a0c06856401
@@ -2592,25 +2609,28 @@ retriever::id                           4da6080168d32445150cc4200af7af6e
 
 __
 meta::parent('/home/spencertipping/bin/repository', <<'__');
-function::dupdate                               1c0273217c5b9f2756bb14a4a00aa7e2
-meta::type::cached_dependency                   e9455b403cbff27bbcc41d917fef482f
-parent::/home/spencertipping/bin/configuration  2db920adc83974d520292606a19e8a98
+function::dupdate                               e51e7c6b51e2806cb11cd4aaed07b6af
+meta::type::cached_dependency                   b9dc0b20c2d3af0deb3b835b20cac4a7
+parent::/home/spencertipping/bin/configuration  b35b6c1c292e779cd4658dbf6a0eae8e
+
 __
 meta::parent('/home/spencertipping/conjectures/perl-objects/sdoc', <<'__');
-function::sdoc                           060cfa349e629eb90a82b87a8ba00c1d
-function::sdoc-html                      4ec4c1710abddb753db5557d79e6b165
-function::sdocp                          8b7ed5bbd537234ae53c0691b6d02c97
-meta::type::sdoc                         392c65eddae300e2aa67014b85884979
-parent::/home/spencertipping/bin/object  4836750c5b8786c6af81b3bdb6a36cfe
-retriever::html-sdoc                     54d22ab83d9f3f2e27ef51033b4817a7
-retriever::sdoc                          6de8ec1f1436fb8e7477b533c321081b
-retriever::sdocp                         fef74cd94fa8761618662802f0bfc171
+function::sdoc                           4d33dcf625897e463bb30fc91cb94339
+function::sdoc-html                      7e7de47fe059a336309a4a0c06856401
+function::sdocp                          c3d738d982ba87418a298ff58478a85b
+meta::type::sdoc                         22cd7315641d38c9d536344e83c36bed
+parent::/home/spencertipping/bin/object  d8afbb7286800b32bf2a9f20fb275d8e
+retriever::html-sdoc                     c98c4a902a9473df7c875bca9b90af31
+retriever::sdoc                          662061e9e41491e2a1debd6862ccf1e7
+retriever::sdocp                         330694ea14a23bb04b65c761075cd946
+
 __
 meta::parent('notes', <<'__');
-function::note    bcbfeac6dd2112f47296265444570a6e
-function::notes   15b3aca0cba3b327a984928154eda2b5
-meta::type::note  7ca6b375a66ecbfd14bef5bcefeb6643
-parent::object    4836750c5b8786c6af81b3bdb6a36cfe
+function::note    5e2737593e8d13fc43bb10e97603e53a
+function::notes   7229b326ac8686b2db6de98496bc7527
+meta::type::note  f81bea58841a438e4ee34608ab4f54c0
+parent::object    d8afbb7286800b32bf2a9f20fb275d8e
+
 __
 meta::parent('object', <<'__');
 bootstrap::html                         f44dd03cb0c904b3a5f69fbda5f018d0
@@ -2724,15 +2744,16 @@ retriever::id                           4da6080168d32445150cc4200af7af6e
 
 __
 meta::parent('preprocessor', <<'__');
-function::preprocess           66e539d29e9afa903569efad0eb7c886
-meta::type::template           25f4d6eafb1d3eea6d5d3d9a71a5623e
-parent::object                 4836750c5b8786c6af81b3bdb6a36cfe
-retriever::pp                  f4a8c288d69963d6ebc5ce0bf7794777
-template::comment              7f8e9be5cd7c865fa64efe3123f62b38
-template::eval                 eb0b1058649eb2d833f348540516b358
-template::failing_conditional  5c593329b434a7044f68cec4b77e8ed9
-template::include              e0624844a65ae41e0217dd871fc0dbfb
-template::pinclude             5ba61c3034a4b183881936aec30d2be9
+function::preprocess           ab5526a02ff417d4c162357dc327e7c4
+meta::type::template           bc4b0c80b5efc716b19e99b832c22bf3
+parent::object                 d8afbb7286800b32bf2a9f20fb275d8e
+retriever::pp                  3b5f5c5d30c5a04f72056dedaacfe7b7
+template::comment              dfe273d2dad3d8159b847545e4e5c309
+template::eval                 1a0e2124a05056be4abc11803883c294
+template::failing_conditional  e3a4523110dd859e828f342185de7c62
+template::include              47b5552d609d97fe7f2522d5c1027014
+template::pinclude             c07ff79bf8d642cceaa9ef844bfcb189
+
 __
 meta::parent('todo', <<'__');
 function::parse-todo      1fce39b3caaeea235602a111c6032147
@@ -2764,6 +2785,36 @@ meta::retriever('sdoc', 'exists $data{"sdoc::$_[0]"} ? sdoc("sdoc::$_[0]") : und
 meta::retriever('sdocp', <<'__');
 my $attribute = attribute($_[0]);
 exists $data{"sdoc::$attribute"} ? sdocp("sdoc::$attribute") : undef;
+__
+meta::sdoc('index.html', <<'__');
+<!doctype html>
+<html>
+  <head>
+  <title>Kevlar RPC test</title>
+  <script src='//ajax.googleapis.com/ajax/libs/jquery/1.6.1/jquery.js'></script>
+
+  <script src='//caterwauljs.org/build/caterwaul.js'></script>
+  <script src='//caterwauljs.org/build/extensions/std.pre.js'></script>
+  <script src='//caterwauljs.org/build/extensions/ui.pre.js'></script>
+  <script src='../kevlar.client.jquery.js'></script>
+
+  <script>
+    $(caterwaul.js_ui(caterwaul.js_all())(function () {
+      var rpc = kevlar().auto(given.nothing in $('body').append('kevlar auto-configuration complete'));
+
+      $('body').append(lhs, rhs, rpc_button, output),
+      where [lhs        = jquery in input.lhs,
+             rhs        = jquery in input.rhs,
+             output     = jquery in textarea.output,
+
+             send_rpc_request() = rpc.add_two_things(lhs.val(), rhs.val(), given.reply in output.val(reply)),
+             rpc_button         = jquery in button('Add these things') /click(send_rpc_request)];
+    }));
+  </script>
+  </head>
+  <body></body>
+</html>
+
 __
 meta::sdoc('js::kevlar.client.jquery', <<'__');
 Kevlar jQuery RPC client | Spencer Tipping
@@ -3079,6 +3130,13 @@ You can also use regular AJAX from the browser:
             invalid_method_error(id)      = log_request_error(id, {invalid: 'method', method: requests[id].method}) -then- reply_with_error(id, 405),
             invalid_size_error(id, size)  = log_request_error(id, {invalid: 'size',   size:   size})                -then- reply_with_error(id, 413),
             invalid_parse_error(id, data) = log_request_error(id, {invalid: 'json',   data:   data})                -then- reply_with_error(id, 400)]})(exports, require);
+__
+meta::sdoc('js::test.rpc', <<'__');
+Kevlar RPC server-side test case.
+Expose a couple of RPCs and make sure they are visible from the client.
+
+require('http').createServer(exports.server({add_two_things: function (x, y) {this(x + y)}})).listen(8080);
+
 __
 meta::template('comment', '\'\';     # A mechanism for line or block comments.');
 meta::template('eval', <<'__');

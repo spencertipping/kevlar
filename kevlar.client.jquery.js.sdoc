@@ -11,13 +11,15 @@ Note that this module expects a global JSON object to be available. This can be 
 and parsing.
 
 caterwaul.js_all()(function (original_kevlar) {
-  kevlar(xs = arguments) = kevlar -effect- xs *![create_rpc_endpoint_for(x)] /seq,
-  kevlar.deglobalize()   = kevlar -re [kevlar = original_kevlar],
+  kevlar(xs = arguments) = this.constructor === kevlar ? this : new kevlar() -effect- xs *![it.create_rpc_endpoint_for(x)] /seq,
+  kevlar.deglobalize()   = this -re [kevlar = original_kevlar],
 
-  kevlar.auto(cc)        = bind [result = kevlar] in $.ajax({async: !cc, url: '/kevlar/rpc-map', type: 'POST', data: '[]'}).complete(cc || given.rpcs [result = rpcs[0]]) -re- result,
+  kevlar.prototype.create_rpc_endpoint_for(name) = this -se [it[to_javascript_identifier(name)] = rpc_thunk_for(name, it)],
+  kevlar.prototype.auto(cc)                      = this -se- $.ajax({url: '/kevlar/rpc-map', type: 'POST', data: '[]', dataType: 'json',
+                                                   success: bgiven.methods in methods[0] *![this.create_rpc_endpoint_for(x)] /seq -effect [cc && cc()]}),
 
-  where [create_rpc_endpoint_for(name)       = kevlar[to_javascript_identifier(name)] = rpc_thunk_for(name),
-         rpc_thunk_for(name)(xs = arguments) = $.ajax({type: 'POST', url: '/#{name}', data: JSON.stringify(xs), success: callback})
-                                               -where [callback = xs[xs.length - 1] -re [it && it.constructor === Function ? xs.pop() : undefined]],
+  where [rpc_thunk_for(name, binding)(xs = arguments) = binding -se- $.ajax({type: 'POST', url: '/#{name}', data: JSON.stringify(parameters), dataType: 'json', success: callback})
+                                                                   -where [parameters = Array.prototype.slice.call(xs),
+                                                                           callback   = parameters[parameters.length - 1] -re [it && it.constructor === Function ? parameters.pop() : null]],
 
-         to_javascript_identifier(s)         = s.replace(/[^A-Za-z0-9_$]/g, '_').replace(/_+/g, '_')]})(typeof kevlar === 'undefined' ? undefined : kevlar);
+         to_javascript_identifier(s)                  = s.replace(/[^A-Za-z0-9_$]/g, '_').replace(/_+/g, '_')]})(typeof kevlar === 'undefined' ? undefined : kevlar);
