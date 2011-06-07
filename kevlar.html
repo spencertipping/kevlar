@@ -2074,9 +2074,9 @@ meta::function('vim', <<'__');
 file::write("$ENV{'HOME'}/.vim/syntax/$_.vim", retrieve("vim_highlighter::$_")) for grep s/^vim_highlighter:://o, keys %data;
 __
 meta::hook('after-render::base-files', <<'__');
-file::write("$_.js.sdoc",  retrieve("sdoc::js::$_"))  for grep s/^sdoc::js:://, sort keys %data;
-file::write("$_.js",       retrieve("js::$_"))        for grep s/^sdoc::js:://, sort keys %data;
-file::write("$_.js.sdocp", retrieve("sdocp::js::$_")) for grep s/^sdoc::js:://, sort keys %data;
+file::write('kevlar.client.jquery.js', retrieve('pp::js::kevlar.client.jquery'));
+file::write('kevlar.js',               retrieve('pp::js::kevlar'));
+
 __
 meta::indicator('cc', 'length ::retrieve(\'data::current-continuation\') ? "\\033[1;36mcc\\033[0;0m" : \'\';');
 meta::indicator('locked', 'is_locked() ? "\\033[1;31mlocked\\033[0;0m" : \'\';');
@@ -2772,6 +2772,25 @@ meta::retriever('sdocp', <<'__');
 my $attribute = attribute($_[0]);
 exists $data{"sdoc::$attribute"} ? sdocp("sdoc::$attribute") : undef;
 __
+meta::sdoc('js::kevlar', <<'__');
+Kevlar web stuff | Spencer Tipping
+Licensed under the terms of the MIT source code license
+
+Introduction.
+Kevlar is a bunch of stuff that may or may not be useful to web application developers. There are two main pieces: the client, comprised of a jQuery-based RPC client, and a bunch of stuff for
+server-end development. The latter piece includes a basic database, a very simple webserver, and some client/server libraries to handle various kinds of encryption and authentication.
+
+kevlar = (function () {
+  var original_kevlar = typeof kevlar === 'undefined' ? undefined : kevlar;
+  var kevlar_global   = {};
+
+- pinclude pp::js::kevlar.transport
+- pinclude pp::js::kevlar.server
+- pinclude pp::js::kevlar.db
+
+  return kevlar_global})();
+
+__
 meta::sdoc('js::kevlar.client.jquery', <<'__');
 Kevlar jQuery RPC client | Spencer Tipping
 Licensed under the terms of the MIT source code license
@@ -2858,9 +2877,9 @@ version they've released in their TokuDB product.
 
 For the moment I'm deferring indexing support. The priority at the moment is to get basic data storage going.
 
-  caterwaul.js_all()(function (exports, require) {
-    exports.database(name) = ensure_directory_sync(name) -returning-
-                             {log: log_generator_for(name), associative: associative_generator_for(name), hourly_log: hourly_log_generator_for(name)},
+  caterwaul.js_all()(function (require) {
+    kevlar_global.database(name) = ensure_directory_sync(name) -returning-
+                                     {log: log_generator_for(name), associative: associative_generator_for(name), hourly_log: hourly_log_generator_for(name)},
 
     where [fs                                   = require('fs'),
            ensure_directory_sync(name)          = fs.statSync(name) -safely- fs.mkdirSync(name, 0755),
@@ -2926,7 +2945,7 @@ For the moment I'm deferring indexing support. The priority at the moment is to 
                                                                                                                                 -then- ps.slice(1, ps.length - 1).forEach(f)
                                                                                                                                 -then [partial = ps.length > 1 && ps[ps.length - 1]]],
                                                               queues                         = {},
-                                                              queue_for(bucket)              = queues[bucket] || (queues[bucket] = [])]]})(exports, require);
+                                                              queue_for(bucket)              = queues[bucket] || (queues[bucket] = [])]]})(require);
 
 __
 meta::sdoc('js::kevlar.server', <<'__');
@@ -2989,8 +3008,7 @@ Writing an RPC endpoint.
 RPC endpoints are just functions that transparently have their arguments JSON-decoded and have their return values JSON-encoded. They are also generally written in CPS. For example, here's how
 you might write a 'hello world' application:
 
-| var kevlar = require('./kevlar');
-  var server = kevlar.server({sayhi: function (name) {
+| var server = kevlar.server({sayhi: function (name) {
     this('hello ' + name);
   }});
   require('http').createServer(server).listen(8080);
@@ -3009,7 +3027,7 @@ You can also use regular AJAX from the browser:
     alert('the server said ' + reply_array[0]);
   });
 
-  caterwaul.js_all()(function (exports, require) {
+  caterwaul.js_all()(function (require) {
     // Immutable configuration variables
     const reply_timeout_interval  = 300000,
           request_body_size_limit = 1048576;
@@ -3017,7 +3035,7 @@ You can also use regular AJAX from the browser:
     // Helper functions
     const next_server_id = given.nothing in Math.random() * 0xffffffff >>> 0;
 
-    exports.server(endpoints, options) = handle_request
+    kevlar_global.server(endpoints, options) = handle_request
 
     -where [requests                      = {},
             responses                     = {},
@@ -3025,7 +3043,7 @@ You can also use regular AJAX from the browser:
             times                         = {},
 
             default_options               = {},
-            settings                      = caterwaul.merge(default_options, options) -effect [it.log_database || (it.log_database = exports.database('kevlar.server.log'))],
+            settings                      = caterwaul.merge(default_options, options) -effect [it.log_database || (it.log_database = kevlar_global.database('kevlar.server.log'))],
 
             default_rpcs                  = {'/kevlar/rpc-map': given.nothing in this(endpoints /keys /seq)},
             valid_rpcs                    = caterwaul.merge(default_rpcs, endpoints /pairs *[['/#{x[0]}', x[1]]] |object |seq),
@@ -3093,7 +3111,21 @@ You can also use regular AJAX from the browser:
 
             invalid_method_error(id)      = log_request_error(id, {invalid: 'method', method: requests[id].method}) -then- reply_with_error(id, 405),
             invalid_size_error(id, size)  = log_request_error(id, {invalid: 'size',   size:   size})                -then- reply_with_error(id, 413),
-            invalid_parse_error(id, data) = log_request_error(id, {invalid: 'json',   data:   data})                -then- reply_with_error(id, 400)]})(exports, require);
+            invalid_parse_error(id, data) = log_request_error(id, {invalid: 'json',   data:   data})                -then- reply_with_error(id, 400)]})(require);
+
+__
+meta::sdoc('js::kevlar.transport', <<'__');
+Kevlar transport-layer utilities | Spencer Tipping
+Licensed under the terms of the MIT source code license
+
+Introduction.
+Most web servers will want to provide some kind of content protection. Sometimes this happens using HTTPS, but that may or may not be necessary depending on the application. I'm implementing
+these encryption and hashing functions to provide a non-HTTPS way to do most authentication-related stuff with reasonable security. (I'm also aware that these libraries are available
+elsewhere, but I'm reimplementing stuff here for fun.)
+
+Base64 encoding.
+
+
 __
 meta::template('comment', '\'\';     # A mechanism for line or block comments.');
 meta::template('eval', <<'__');
