@@ -2077,8 +2077,9 @@ meta::function('vim', <<'__');
 file::write("$ENV{'HOME'}/.vim/syntax/$_.vim", retrieve("vim_highlighter::$_")) for grep s/^vim_highlighter:://o, keys %data;
 __
 meta::hook('after-render::base-files', <<'__');
-file::write('kevlar.client.jquery.js', retrieve('pp::js::kevlar.client.jquery'));
-file::write('kevlar.js',               retrieve('pp::js::kevlar'));
+file::write('kevlar.client.jquery.js',    retrieve('pp::js::kevlar.client.jquery'));
+file::write('kevlar.client.transport.js', retrieve('pp::js::kevlar.transport'));
+file::write('kevlar.js',                  retrieve('pp::js::kevlar'));
 
 __
 meta::indicator('cc', 'length ::retrieve(\'data::current-continuation\') ? "\\033[1;36mcc\\033[0;0m" : \'\';');
