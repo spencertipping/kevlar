@@ -245,9 +245,11 @@ meta::define_form 'todo', sub {
 __
 meta::meta('type::vim_highlighter', 'meta::functor::editable \'vim_highlighter\', extension => \'.vim\', inherit => 1, default => \'edit\';');
 meta::alias('bs', 'todo-summary todo::bugs');
+meta::alias('e', 'edit sdoc::js::kevlar');
 meta::alias('ec', 'edit sdoc::js::kevlar.client.jquery');
 meta::alias('edb', 'edit sdoc::js::kevlar.db');
 meta::alias('es', 'edit sdoc::js::kevlar.server');
+meta::alias('et', 'edit sdoc::js::kevlar.transport');
 meta::alias('fs', 'features show');
 meta::bootstrap('html', <<'__');
 <html>
@@ -1792,7 +1794,8 @@ hook('after-render');
 __
 meta::function('repl', <<'__');
 # Starts a node repl with kevlar already loaded.
-node([qw/cached_dependency::caterwaul.js cached_dependency::caterwaul.std.js js::kevlar.db js::kevlar.server js::repl-driver/]);
+node([qw/cached_dependency::caterwaul.js cached_dependency::caterwaul.std.js pp::js::kevlar js::repl-driver/]);
+
 __
 meta::function('repl.db', <<'__');
 # Starts a node repl with kevlar already loaded.
@@ -2387,9 +2390,9 @@ unlink $name;
 $result;
 __
 meta::js('repl-driver', <<'__');
-// At this point Kevlar is stored in exports. We need to move it to a variable called 'kevlar' and expose that to the REPL context.
 var repl = require('repl').start();
-repl.context.kevlar = exports;
+repl.context.kevlar = kevlar;
+
 __
 meta::library('shell', <<'__');
 # Functions for shell parsing and execution.
@@ -2780,15 +2783,19 @@ Introduction.
 Kevlar is a bunch of stuff that may or may not be useful to web application developers. There are two main pieces: the client, comprised of a jQuery-based RPC client, and a bunch of stuff for
 server-end development. The latter piece includes a basic database, a very simple webserver, and some client/server libraries to handle various kinds of encryption and authentication.
 
-kevlar = (function () {
-  var original_kevlar = typeof kevlar === 'undefined' ? undefined : kevlar;
-  var kevlar_global   = {};
+kevlar = caterwaul.js_all()(function (require, deglobalize_function) {
+  var kevlar = {deglobalize: deglobalize_function};
 
-- pinclude pp::js::kevlar.transport
 - pinclude pp::js::kevlar.server
 - pinclude pp::js::kevlar.db
 
-  return kevlar_global})();
+  return kevlar})(require, (function () {var global = typeof kevlar === 'undefined' ? undefined : kevlar; return function () {var k = kevlar; kevlar = global; return k}})());
+
+Client/server extensions.
+These modules run on both the client and the server, so they provide their own caterwaul invocations rather than being bundled into the above function. They assume that the kevlar global is
+defined.
+
+- pinclude pp::js::kevlar.transport
 
 __
 meta::sdoc('js::kevlar.client.jquery', <<'__');
@@ -2877,9 +2884,9 @@ version they've released in their TokuDB product.
 
 For the moment I'm deferring indexing support. The priority at the moment is to get basic data storage going.
 
-  caterwaul.js_all()(function (require) {
-    kevlar_global.database(name) = ensure_directory_sync(name) -returning-
-                                     {log: log_generator_for(name), associative: associative_generator_for(name), hourly_log: hourly_log_generator_for(name)},
+  (function () {
+    kevlar.database(name) = ensure_directory_sync(name) -returning-
+                              {log: log_generator_for(name), associative: associative_generator_for(name), hourly_log: hourly_log_generator_for(name)},
 
     where [fs                                   = require('fs'),
            ensure_directory_sync(name)          = fs.statSync(name) -safely- fs.mkdirSync(name, 0755),
@@ -2945,7 +2952,7 @@ For the moment I'm deferring indexing support. The priority at the moment is to 
                                                                                                                                 -then- ps.slice(1, ps.length - 1).forEach(f)
                                                                                                                                 -then [partial = ps.length > 1 && ps[ps.length - 1]]],
                                                               queues                         = {},
-                                                              queue_for(bucket)              = queues[bucket] || (queues[bucket] = [])]]})(require);
+                                                              queue_for(bucket)              = queues[bucket] || (queues[bucket] = [])]]})();
 
 __
 meta::sdoc('js::kevlar.server', <<'__');
@@ -3027,7 +3034,7 @@ You can also use regular AJAX from the browser:
     alert('the server said ' + reply_array[0]);
   });
 
-  caterwaul.js_all()(function (require) {
+  (function () {
     // Immutable configuration variables
     const reply_timeout_interval  = 300000,
           request_body_size_limit = 1048576;
@@ -3035,7 +3042,7 @@ You can also use regular AJAX from the browser:
     // Helper functions
     const next_server_id = given.nothing in Math.random() * 0xffffffff >>> 0;
 
-    kevlar_global.server(endpoints, options) = handle_request
+    kevlar.server(endpoints, options) = handle_request
 
     -where [requests                      = {},
             responses                     = {},
@@ -3043,7 +3050,7 @@ You can also use regular AJAX from the browser:
             times                         = {},
 
             default_options               = {},
-            settings                      = caterwaul.merge(default_options, options) -effect [it.log_database || (it.log_database = kevlar_global.database('kevlar.server.log'))],
+            settings                      = caterwaul.merge(default_options, options) -effect [it.log_database || (it.log_database = kevlar.database('kevlar.server.log'))],
 
             default_rpcs                  = {'/kevlar/rpc-map': given.nothing in this(endpoints /keys /seq)},
             valid_rpcs                    = caterwaul.merge(default_rpcs, endpoints /pairs *[['/#{x[0]}', x[1]]] |object |seq),
@@ -3111,20 +3118,38 @@ You can also use regular AJAX from the browser:
 
             invalid_method_error(id)      = log_request_error(id, {invalid: 'method', method: requests[id].method}) -then- reply_with_error(id, 405),
             invalid_size_error(id, size)  = log_request_error(id, {invalid: 'size',   size:   size})                -then- reply_with_error(id, 413),
-            invalid_parse_error(id, data) = log_request_error(id, {invalid: 'json',   data:   data})                -then- reply_with_error(id, 400)]})(require);
+            invalid_parse_error(id, data) = log_request_error(id, {invalid: 'json',   data:   data})                -then- reply_with_error(id, 400)]})();
 
 __
 meta::sdoc('js::kevlar.transport', <<'__');
-Kevlar transport-layer utilities | Spencer Tipping
+Kevlar transport module | Spencer Tipping
 Licensed under the terms of the MIT source code license
 
 Introduction.
 Most web servers will want to provide some kind of content protection. Sometimes this happens using HTTPS, but that may or may not be necessary depending on the application. I'm implementing
 these encryption and hashing functions to provide a non-HTTPS way to do most authentication-related stuff with reasonable security. (I'm also aware that these libraries are available
-elsewhere, but I'm reimplementing stuff here for fun.)
+elsewhere, but I'm reimplementing stuff here for fun. It's fine with me if you want to fork the project to use existing open-source solutions instead of my less-performant versions.)
 
-Base64 encoding.
+  caterwaul.js_all()(function () {
+    kevlar.transport = {} -effect [
 
+Ascii85 encoding.
+This is similar to base-64 but achieves a better packing ratio. The idea is to take each 32-bit group of characters (in this case two characters, since a character has 16 bits and I'm too lazy
+to do UTF-8 encoding) and arithmetically convert that into five base-85 digits. Each base-85 digit is just ASCII 33 + some number, yielding a high value of 127. This encoder doesn't insert
+checksums or add metadata other than the minimal amount of padding necessary to derive the length of the original string. This implementation differs from the one described at
+http://en.wikipedia.org/wiki/Ascii85 in that it adds at most one null character, since each character is encoded as 16 bits rather than 8.
+
+  it.encode85(s) = encoded -where [powers_of_85    = n[5] *~[n[1, x + 2] /[x * 85]] -seq,
+                                   encode_block(n) = n[5] *[String.fromCharCode(33 + n / powers_of_85[4 - x] % 85)] -seq -re- it.join(''),
+                                   padded          = s.length & 1 ? s + String.fromCharCode(0) : s,
+                                   encoded_string  = n[0, padded.length, 2] *[encode_block((padded.charCodeAt(x) << 16) >>> 0 | padded.charCodeAt(x + 1))] -seq -re- it.join(''),
+                                   encoded         = s.length & 1 ? encoded_string.substr(0, encoded_string.length - 2) : encoded_string],
+
+  it.decode85(s) = decoded -where [decode_block(n) = String.fromCharCode(n >>> 16) + String.fromCharCode(n >>> 0 & 0xffff),
+                                   block_value(s)  = n[6] /[x * 85 + s.charCodeAt(x0 - 1) - 33] -seq,
+                                   padded          = s.length % 5 ? '#{s}uu' : s,
+                                   decoded_string  = n[0, padded.length, 5] *[decode_block(block_value(padded.substr(x, 5)))] -seq -re- it.join(''),
+                                   decoded         = s.length % 5 ? decoded_string.substr(0, decoded_string.length - 1) : decoded_string]]})();
 
 __
 meta::template('comment', '\'\';     # A mechanism for line or block comments.');
