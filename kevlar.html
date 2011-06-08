@@ -3161,7 +3161,7 @@ Like the other functions in this file, this function treats all characters as be
 hashes will be different from the same hash on ASCII-encoded text.
 
   kevlar.transport -effect [
-    it.sha256(s) = n[0, s.length, 32] *![hash_block(h, s.substr(x, 32))] /seq -re- h,
+    it.sha256(s) = n[0, s.length, 32] *![hash_block(h, s.substr(x, 32))] -seq -re- h *[x.toString(16)] /seq -where [h = hs.slice()],
 
     where [hs                   = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19],
 
@@ -3174,7 +3174,21 @@ hashes will be different from the same hash on ASCII-encoded text.
                                    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
                                    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2],
 
-           pad(s)                = s + padding_characters(224 - (s.length & 0xff)) + big_endian(s.length),
+           hash_block(h, s)      = add_hash_results() -where [ws = n[16] *[s.charAt(x) << 16 >>> 0 | s.charAt(x + 1)] -seq -effect-
+                                                                   n[16, 64] *![it[x] = it[x - 16] + s0 + it[x - 7] + s1
+                                                                                        -where [s0 = rr(it[x - 15], 7) ^ rr(it[x - 15], 18) ^ it[x - 15] >>> 3,
+                                                                                                s1 = rr(it[x - 2], 17) ^ rr(it[x - 2],  19) ^ it[x - 2]  >>> 10]] /seq,
+
+                                                              vs = h.slice(),
+                                                              add_hash_results() = n[64] *![t1 = vs[7] + (rr(vs[4], 6)  ^ rr(vs[4], 11) ^ rr(vs[4], 25)) +
+                                                                                                         (vs[4] & vs[5] ^ ~vs[4] & vs[6]) + ks[x] + ws[x] >>> 0,
+                                                                                            t2 = (rr(vs[0], 2)  ^ rr(vs[0], 13) ^ rr(vs[0], 22)) +
+                                                                                                 (vs[0] & vs[1] ^ vs[0] & vs[2] ^ vs[1] & vs[2]) >>> 0,
+                                                                                            vs = [t1 + t2 >>> 0, vs[0], vs[1], vs[2], vs[3] + t1 >>> 0, vs[4], vs[5], vs[6]]] -seq
+                                                                                   -then [vs *![h[xi] = h[xi] + x >>> 0] -seq]],
+
+           rr(x, bits)           = x >>> bits | x & 0xffffffff << (32 - bits),
+           pad(s)                = s + padding_characters(224 - (s.length & 0xff)) + big_endian(s.length * 16),
            padding_characters(n) = n ? String.fromCharCode(0x8000) + n[n - 1] *[String.fromCharCode(0)] /seq /re [it.join('')] : '',
            big_endian(n)         = n[4] *[String.fromCharCode(n >> (3 - x << 4) & 0xffff)] -seq]]})();
 
