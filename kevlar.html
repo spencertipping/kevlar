@@ -113,13 +113,14 @@ meta::functor::editable 'configuration', inherit => 0, extension => '.conf', def
   # Comments are not parsed in option text; that is, you could specify an option that contained
   # a # and the # and following text would be considered part of that option.
   my ($data) = @_;
-  my @options = grep /:/o && ! /^\h*#/o && ! /^\h*$/o, split(/\v+/o, $data);
+  my @options = grep /:\h+/o && ! /^\h*#/o && ! /^\h*$/o, split(/\v+/o, $data);
   s/^\h+//o for @options;
-  my @key_values = map split(/\s*:\s*/o, $_, 2), @options;
+  my @key_values = map split(/\h*:\h+/o, $_, 2), @options;
   $key_values[$_ << 1] and $key_values[$_ << 1] =~ s/\s/_/go for 0 .. @key_values >> 1;
   $key_values[$_ << 1] and $key_values[$_ << 1] = lc $key_values[$_ << 1] for 0 .. @key_values >> 1;
   @key_values;
 };
+
 __
 meta::meta('type::data', 'meta::functor::editable \'data\', extension => \'\', inherit => 0, default => \'cat\';');
 meta::meta('type::function', <<'__');
@@ -1506,14 +1507,21 @@ __
 meta::function('current-state', 'serialize(\'-pS\');');
 meta::function('disable', 'hook(\'disable\', chmod_self(sub {$_[0] & 0666}));');
 meta::function('dupdate', <<'__');
-# Update the repository based on the dependencies it lists.
-use LWP::Simple ();
+# Update the repository based on the dependencies it lists. These dependencies
+# can be anything that's retrievable.
+
+# If you have any ::s in the local name of the dependency, then the cached_dependency::
+# prefix won't be added. This lets you import slices of other objects and have
+# those slices merge into any namespace you'd like.
+
 rm(grep /^cached_dependency::/, keys %data);
-my %dependencies = dependencies();
+my %dependencies = map &{attribute($_)}(), select_keys('--criteria' => "^configuration::depend.*");
 
 for (keys %dependencies) {
   terminal::info("Retrieving $dependencies{$_} as $_");
-  associate("cached_dependency::$_", LWP::Simple::get($dependencies{$_}))}
+  my $prefix = /::/ ? '' : 'cached_dependency::';
+  associate("${prefix}$_", retrieve($dependencies{$_}))}
+
 __
 meta::function('edit', <<'__');
 my ($name, %options) = @_;
@@ -1583,7 +1591,8 @@ meta::function('initial-state', '$transient{initial};');
 meta::function('is', <<'__');
 my ($attribute, @criteria) = @_;
 my ($options, @stuff) = separate_options(@criteria);
-attribute_is($attribute, %$options);
+exists $data{$attribute} and attribute_is($attribute, %$options);
+
 __
 meta::function('load-state', <<'__');
 around_hook('load-state', @_, sub {
@@ -1714,23 +1723,24 @@ meta::function('precompile', <<'__');
 # written to stdout.
 
 use LWP::Simple qw/get/;
+use MIME::Base64;
 
 my ($html) = retrieve(@_);
 my @pieces = split /(<script[^>]+src=["']([^"']+)['"]>\s*<\/script>|<link rel=["']stylesheet["'][^>]href=["']([^'"]+)["'](?:\/>|>\s*<\/link>))/, $html;
-
-sub grab {
-  my ($url) = @_;
-  return get("http://$url") if $url =~ s/^(http:)?\/\///;
-  retrieve($url) or terminal::warning("failed to retrieve $url")}
 
 my @new_pieces;
 for (0 .. $#pieces) {
   push @new_pieces, $pieces[$_] if $_ % 4 == 0;
 
-  push @new_pieces, '<script>' . grab($pieces[$_ + 1]) . '</script>' if $_ % 4 == 1 && $pieces[$_] =~ /<script/;
-  push @new_pieces, '<style>'  . grab($pieces[$_ + 2]) . '</style>'  if $_ % 4 == 1 && $pieces[$_] =~ /<link/}
+  push @new_pieces, '<script>' . retrieve($pieces[$_ + 1]) . '</script>' if $_ % 4 == 1 && $pieces[$_] =~ /<script/;
+  push @new_pieces, '<style>'  . retrieve($pieces[$_ + 2]) . '</style>'  if $_ % 4 == 1 && $pieces[$_] =~ /<link/;}
 
-join '', @new_pieces;
+my $partially_resolved = join '', @new_pieces;
+
+# Now replace any remaining http urls with data urls.
+my @http_urls = split /(http:\/\/[^'"]+)/, $partially_resolved;
+$_ & 1 and $http_urls[$_] = retrieve("data-url::$http_urls[$_]") for 0 .. $#http_urls;
+join '', @http_urls;
 
 __
 meta::function('preprocess', <<'__');
@@ -1960,7 +1970,8 @@ __
 meta::function('sh', 'system(@_);');
 meta::function('shell', <<'__');
 terminal::cc(retrieve('data::current-continuation')) if length $data{'data::current-continuation'};
-shell::repl();
+around_hook('shell', sub {shell::repl()});
+
 __
 meta::function('size', <<'__');
 my $size = 0;
@@ -2461,15 +2472,15 @@ function::sdoc                           4d33dcf625897e463bb30fc91cb94339
 function::sdoc-html                      7e7de47fe059a336309a4a0c06856401
 function::sdocp                          c3d738d982ba87418a298ff58478a85b
 meta::type::sdoc                         22cd7315641d38c9d536344e83c36bed
-parent::/home/spencertipping/bin/object  d8afbb7286800b32bf2a9f20fb275d8e
+parent::/home/spencertipping/bin/object  dcebc8c5c3ed92cd48b2e950129ab969
 retriever::html-sdoc                     c98c4a902a9473df7c875bca9b90af31
 retriever::sdoc                          662061e9e41491e2a1debd6862ccf1e7
 retriever::sdocp                         330694ea14a23bb04b65c761075cd946
 
 __
 meta::parent('/home/spencertipping/bin/configuration', <<'__');
-meta::type::configuration                6a442b586820b0719ec533aa1aeec1d1
-parent::/home/spencertipping/bin/object  d8afbb7286800b32bf2a9f20fb275d8e
+meta::type::configuration                7f5ba514d47ac29a3c226d0e331d9da4
+parent::/home/spencertipping/bin/object  dcebc8c5c3ed92cd48b2e950129ab969
 
 __
 meta::parent('/home/spencertipping/bin/node-base', <<'__');
@@ -2481,10 +2492,10 @@ function::run-forever                                       e5b227e835b00b82d439
 internal_function::dep                                      9f5c8b82af8796a0ef9909de9c28d56b
 message_color::test                                         03621cd6ac0b1a40d703f41e26c5807f
 meta::type::js                                              e292996c992f4bc110e9577266c94784
-parent::/home/spencertipping/bin/repository                 bd34ba1a0a1367bd24fd03bfe5470222
-parent::/home/spencertipping/conjectures/perl-objects/sdoc  da86b523057ace1e04f19b72dc64dae6
-parent::notes                                               21e88a0094a3c33158395b487d90262c
-parent::preprocessor                                        ef5c5cab7e1fd48e2658187b10ed3204
+parent::/home/spencertipping/bin/repository                 df206f2c8cd08b68be29319dec8ed52e
+parent::/home/spencertipping/conjectures/perl-objects/sdoc  2f942628c020ff6b5ff0ac17beb2229e
+parent::notes                                               8ff762960dbff60c01cea9e7f6fc063a
+parent::preprocessor                                        47927de34eb81538f3a6190e71885779
 
 __
 meta::parent('/home/spencertipping/bin/object', <<'__');
@@ -2512,7 +2523,7 @@ function::hooks                         3d989899c616f7440429a2d9bf1cc44b
 function::identity                      6523885762fcc2f354fc25cf6ed126ce
 function::import                        5d0f0634cbd01274f2237717507198a2
 function::initial-state                 03d8ed608855a723124e79ca184d8e73
-function::is                            ee26a8494ff12dc6df26e61ecd926302
+function::is                            41564c8f21b12ab80824ac825266d805
 function::load-state                    2123ad2d7bfaf83c8959fa003d8c4ad4
 function::lock                          5d8db258704e6a8623fac796f62fac02
 function::ls                            0b310755e747c65bca09508fd9d841f0
@@ -2527,7 +2538,7 @@ function::save-state                    a7d349c67a4be8fa9e81fe34b7a94cfd
 function::serialize                     a19ada2d2558ea9da3a7942fb913e15f
 function::serialize_single              aa77af032272f5a2664e21713739a223
 function::sh                            1b2f542ca9dd63ad437058b7f6f61aac
-function::shell                         c07f3725aa8e31ac5b55ffcf0f39bba1
+function::shell                         22d25a32ffc3f2855fb7e2aec77c72fb
 function::size                          6cd9a4dd17be87ea2962f8f566a97d11
 function::snapshot                      56939a47f2758421669641e15ebd66eb
 function::state                         8c68044dccae28f33244d0c7e9e9acfb
@@ -2596,12 +2607,15 @@ meta::type::retriever                   71a29050bf9f20f6c71afddff83addc9
 meta::type::state                       84da7d5220471307f1f990c5057d3319
 retriever::file                         3bbc9d8a887a536044bafff1d54def7e
 retriever::id                           4da6080168d32445150cc4200af7af6e
+retriever::object                       c7633990b4e01bdc783da7e545799f4f
+retriever::perl                         f41938e6dbad317f62abffc1e4d28cca
 
 __
 meta::parent('/home/spencertipping/bin/repository', <<'__');
-function::dupdate                               e51e7c6b51e2806cb11cd4aaed07b6af
+function::dupdate                               f3332a122f7864d40119b33bdef42912
 meta::type::cached_dependency                   b9dc0b20c2d3af0deb3b835b20cac4a7
-parent::/home/spencertipping/bin/configuration  b35b6c1c292e779cd4658dbf6a0eae8e
+parent::/home/spencertipping/bin/configuration  19487ddf618fdd05409defb63747ebd3
+retriever::http                                 a23617a5787de41d1a89ad4496cacce3
 
 __
 meta::parent('/home/spencertipping/conjectures/perl-objects/sdoc', <<'__');
@@ -2609,7 +2623,7 @@ function::sdoc                           4d33dcf625897e463bb30fc91cb94339
 function::sdoc-html                      7e7de47fe059a336309a4a0c06856401
 function::sdocp                          c3d738d982ba87418a298ff58478a85b
 meta::type::sdoc                         22cd7315641d38c9d536344e83c36bed
-parent::/home/spencertipping/bin/object  d8afbb7286800b32bf2a9f20fb275d8e
+parent::/home/spencertipping/bin/object  dcebc8c5c3ed92cd48b2e950129ab969
 retriever::html-sdoc                     c98c4a902a9473df7c875bca9b90af31
 retriever::sdoc                          662061e9e41491e2a1debd6862ccf1e7
 retriever::sdocp                         330694ea14a23bb04b65c761075cd946
@@ -2619,7 +2633,7 @@ meta::parent('notes', <<'__');
 function::note    5e2737593e8d13fc43bb10e97603e53a
 function::notes   7229b326ac8686b2db6de98496bc7527
 meta::type::note  f81bea58841a438e4ee34608ab4f54c0
-parent::object    d8afbb7286800b32bf2a9f20fb275d8e
+parent::object    dcebc8c5c3ed92cd48b2e950129ab969
 
 __
 meta::parent('object', <<'__');
@@ -2647,7 +2661,7 @@ function::hooks                         3d989899c616f7440429a2d9bf1cc44b
 function::identity                      6523885762fcc2f354fc25cf6ed126ce
 function::import                        5d0f0634cbd01274f2237717507198a2
 function::initial-state                 03d8ed608855a723124e79ca184d8e73
-function::is                            ee26a8494ff12dc6df26e61ecd926302
+function::is                            41564c8f21b12ab80824ac825266d805
 function::load-state                    2123ad2d7bfaf83c8959fa003d8c4ad4
 function::lock                          5d8db258704e6a8623fac796f62fac02
 function::ls                            0b310755e747c65bca09508fd9d841f0
@@ -2662,7 +2676,7 @@ function::save-state                    a7d349c67a4be8fa9e81fe34b7a94cfd
 function::serialize                     a19ada2d2558ea9da3a7942fb913e15f
 function::serialize_single              aa77af032272f5a2664e21713739a223
 function::sh                            1b2f542ca9dd63ad437058b7f6f61aac
-function::shell                         c07f3725aa8e31ac5b55ffcf0f39bba1
+function::shell                         22d25a32ffc3f2855fb7e2aec77c72fb
 function::size                          6cd9a4dd17be87ea2962f8f566a97d11
 function::snapshot                      56939a47f2758421669641e15ebd66eb
 function::state                         8c68044dccae28f33244d0c7e9e9acfb
@@ -2731,12 +2745,14 @@ meta::type::retriever                   71a29050bf9f20f6c71afddff83addc9
 meta::type::state                       84da7d5220471307f1f990c5057d3319
 retriever::file                         3bbc9d8a887a536044bafff1d54def7e
 retriever::id                           4da6080168d32445150cc4200af7af6e
+retriever::object                       c7633990b4e01bdc783da7e545799f4f
+retriever::perl                         f41938e6dbad317f62abffc1e4d28cca
 
 __
 meta::parent('preprocessor', <<'__');
 function::preprocess           ab5526a02ff417d4c162357dc327e7c4
 meta::type::template           bc4b0c80b5efc716b19e99b832c22bf3
-parent::object                 d8afbb7286800b32bf2a9f20fb275d8e
+parent::object                 dcebc8c5c3ed92cd48b2e950129ab969
 retriever::pp                  3b5f5c5d30c5a04f72056dedaacfe7b7
 template::comment              dfe273d2dad3d8159b847545e4e5c309
 template::eval                 1a0e2124a05056be4abc11803883c294
@@ -2749,14 +2765,20 @@ meta::parent('todo', <<'__');
 function::parse-todo      c8247ece4f8ea189cd6523b0f94c7247
 function::todo-summary    1c986ec8c6efd4dfae2d3ba5e7ca64f2
 meta::type::todo          143fa39e155c81f4186aa53a947296ec
-parent::./sdoc            0cf5e33c9cfaeb79c64650bf10c89e73
-parent::vim-highlighters  0e38ef567b5c5457e50a0768f6be64eb
+parent::./sdoc            2f942628c020ff6b5ff0ac17beb2229e
+parent::vim-highlighters  bf65e8311a9198ad426085f5d13dd93b
 
 __
 meta::parent('vim-highlighters', <<'__');
 function::vim                cf9e37026f6cd1499a6dd258fbbcd060
 meta::type::vim_highlighter  11a2d74eca3445ee1b7887a6f6370462
-parent::object               d8afbb7286800b32bf2a9f20fb275d8e
+parent::object               dcebc8c5c3ed92cd48b2e950129ab969
+
+__
+meta::retriever('data-url', <<'__');
+use MIME::Base64;
+return undef unless $_[0] =~ /^data-url::(.*)$/;
+'data:;base64,' . encode_base64(retrieve($1));
 
 __
 meta::retriever('file', '-f $_[0] ? file::read($_[0]) : undef;');
@@ -2765,7 +2787,25 @@ my ($attribute) = @_;
 return undef unless $attribute =~ s/^html::/sdoc::/ and exists $data{$attribute};
 &{'sdoc-html'}($attribute);
 __
+meta::retriever('http', <<'__');
+use LWP::Simple ();
+return undef unless $_[0] =~ /^(?:http:)?\/\/(\w+.*)$/;
+LWP::Simple::get("http://$1");
+
+__
 meta::retriever('id', '$_[0] =~ /^id::/ ? substr($_[0], 4) : undef;');
+meta::retriever('object', <<'__');
+# Fetch a property from another Perl object. This uses the 'cat' function.
+return undef unless $_[0] =~ /^object::(.*?)::(.*)$/ && -x $1 && qx|$1 is '$2'|;
+join '', qx|$1 cat '$2'|;
+
+__
+meta::retriever('perl', <<'__');
+# Lets you use the result of evaluating some Perl expression
+return undef unless $_[0] =~ /^perl::(.*)$/;
+eval $1;
+
+__
 meta::retriever('pp', <<'__');
 return undef unless namespace($_[0]) eq 'pp';
 my $attr = retrieve(attribute($_[0]));
