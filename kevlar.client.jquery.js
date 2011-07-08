@@ -19,8 +19,8 @@ caterwaul.js_all()(function (original_kevlar) {
                                                    success: bgiven.methods in methods[0] *![this.create_rpc_endpoint_for(x)] /seq -effect [cc && cc()]}),
 
   where [rpc_thunk_for(name, binding)(xs = arguments) = binding -se- $.ajax({type: 'POST', url: '/#{name}', data: JSON.stringify(parameters), dataType: 'json', success: callback})
-                                                                   -where [parameters = Array.prototype.slice.call(xs),
-                                                                           callback   = parameters[parameters.length - 1] -re [it && it.constructor === Function ? parameters.pop() : null]],
+                                                        -where [parameters = Array.prototype.slice.call(xs),
+                                                                callback   = parameters[parameters.length - 1] -re [it && it.constructor === Function ? parameters.pop() : null]],
 
          to_javascript_identifier(s)                  = s.replace(/[^A-Za-z0-9_$]/g, '_').replace(/_+/g, '_')]})(typeof kevlar === 'undefined' ? undefined : kevlar);
 
